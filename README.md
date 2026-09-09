@@ -49,6 +49,14 @@ rises sharply.
 **earlyoom must be off on both nodes.** Under deep-context load it will kill
 the engine. This model runs close to the memory ceiling by design.
 
+**The snapshot must be complete on both nodes.** `--tokenizer-mode deepseek_v4`
+loads the checkpoint's own encoder from `encoding/encoding_dsv4.py`. A filtered
+or partial download serves garbled text instead of failing, which is a slow way
+to lose an evening. `scripts/run.sh` checks for it on both nodes before
+launching. Neither this repository nor the two references ship a chat template;
+the encoder plus `--default-chat-template-kwargs` is the whole path, which is
+why the official checkpoint has no `chat_template` in `tokenizer_config.json`.
+
 **Drop the page cache on both nodes.** On unified memory a warm cache starves
 the GPU allocator part-way through the load, and `free -g` misreports it.
 

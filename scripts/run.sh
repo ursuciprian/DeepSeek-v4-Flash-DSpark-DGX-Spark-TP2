@@ -78,6 +78,17 @@ done
 ssh "$HEAD_IP" "ping -c 2 -W 3 $WORKER_IP" >/dev/null 2>&1 || fail "$HEAD_IP cannot reach $WORKER_IP over CX-7"
 echo "  ok: CX-7 path $HEAD_IP -> $WORKER_IP"
 
+# The DeepSeek-V4 tokenizer mode loads the checkpoint's own encoder. A snapshot missing
+# encoding/encoding_dsv4.py serves garbled output rather than failing, so check both nodes.
+say "Checking the checkpoint snapshot on both nodes"
+SNAP="$HOME/.cache/huggingface/hub/models--${MODEL//\//--}/snapshots/$REVISION"
+for ip in $HOSTS; do
+  for f in config.json model.safetensors.index.json encoding/encoding_dsv4.py; do
+    ssh "$ip" "[ -e '$SNAP/$f' ]" || fail "$ip: missing $f in the snapshot. Re-fetch the full repo; a filtered download breaks the DeepSeek-V4 encoder."
+  done
+  echo "  ok: $ip snapshot complete"
+done
+
 if [ "$CHECK_ONLY" = 1 ]; then say "Checks passed, not launching"; exit 0; fi
 
 say "Materialising recipe for $REPO"

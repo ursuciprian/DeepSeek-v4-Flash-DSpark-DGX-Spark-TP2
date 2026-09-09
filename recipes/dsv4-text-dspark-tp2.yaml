@@ -65,6 +65,28 @@ env:
   TRITON_CACHE_DIR: /root/.cache/vllm-dspark/triton
   TORCHINDUCTOR_CACHE_DIR: /root/.cache/vllm-dspark/inductor
   TORCH_EXTENSIONS_DIR: /root/.cache/vllm-dspark/torch-ext
+  # arch: GB10 is sm_121a; without these the JIT compiles for the wrong target or refuses
+  TORCH_CUDA_ARCH_LIST: 12.1a
+  FLASHINFER_CUDA_ARCH_LIST: 12.1a
+  CUTE_DSL_ARCH: sm_121a
+  FLASHINFER_DISABLE_VERSION_CHECK: '1'
+  DG_JIT_USE_NVRTC: '0'
+  # fabric detail that matters on a two-node RoCE link
+  NCCL_IB_ROCE_VERSION_NUM: '2'
+  NCCL_IB_ADDR_FAMILY: AF_INET
+  NCCL_NVLS_ENABLE: '0'
+  NCCL_CUMEM_ENABLE: '0'
+  NCCL_IGNORE_CPU_AFFINITY: '1'
+  NCCL_IB_MERGE_NICS: '0'
+  # a long prefill on a deep context can exceed the default RPC timeout and kill the engine
+  VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1800'
+  VLLM_USE_FLASHINFER_SAMPLER: '1'
+  VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: '0'
+  VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: '256'
+  TILELANG_CACHE_DIR: /root/.cache/vllm-dspark/tilelang
+  TILELANG_CLEANUP_TEMP_FILES: '1'
+  HF_HUB_DISABLE_XET: '1'
+  TRANSFORMERS_OFFLINE: '1'
 
 command: |
   vllm serve {model} \
