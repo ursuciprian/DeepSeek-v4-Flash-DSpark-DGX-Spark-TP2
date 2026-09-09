@@ -7,7 +7,7 @@ description: DeepSeek-V4-Flash Vision-Exp on two DGX Sparks, DSpark k=6, NVFP4 s
 name: dsv4-vision-dspark-tp2-nvfp4kv
 model: deepseek-ai/DeepSeek-V4-Flash-Vision-Exp
 runtime: vllm
-container: ghcr.io/anemll/dspark-vllm-gx10@sha256:3430d6614a8e2925f34d059af6caf05aff42387326db4d05639a60f10f2654d8
+container: ghcr.io/anemll/dspark-vllm-gx10@sha256:a83948492cf13df455170fb42885f5ef4db54fefe0feff0f841ecbff464ac9d8
 
 min_nodes: 2
 max_nodes: 2
