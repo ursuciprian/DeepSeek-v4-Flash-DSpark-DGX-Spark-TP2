@@ -1,0 +1,4 @@
+registries:
+  - name: dsv4-dspark
+    description: DeepSeek-V4-Flash with DSpark speculative decoding on two DGX Sparks (TP=2)
+    recipes: recipes
