@@ -13,7 +13,7 @@ description: DeepSeek-V4-Flash Vision-Exp on two DGX Sparks, DSpark k=6, fp8 KV,
 name: dsv4-vision-dspark-tp2
 model: deepseek-ai/DeepSeek-V4-Flash-Vision-Exp
 runtime: vllm
-container: ghcr.io/anemll/dspark-vllm-gx10@sha256:3430d6614a8e2925f34d059af6caf05aff42387326db4d05639a60f10f2654d8
+container: ghcr.io/anemll/dspark-vllm-gx10@sha256:a83948492cf13df455170fb42885f5ef4db54fefe0feff0f841ecbff464ac9d8
 
 min_nodes: 2
 max_nodes: 2
@@ -68,12 +68,12 @@ env:
   VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
   # JIT caches must be node-local. Pointing these at a shared or NFS-mounted
   # directory makes every rank recompile and can deadlock the boot.
-  VLLM_CACHE_ROOT: /root/.cache/vllm-dspark
-  DG_JIT_CACHE_DIR: /root/.cache/vllm-dspark/deepgemm
-  FLASHINFER_WORKSPACE_BASE: /root/.cache/vllm-dspark/flashinfer
-  TRITON_CACHE_DIR: /root/.cache/vllm-dspark/triton
-  TORCHINDUCTOR_CACHE_DIR: /root/.cache/vllm-dspark/inductor
-  TORCH_EXTENSIONS_DIR: /root/.cache/vllm-dspark/torch-ext
+  VLLM_CACHE_ROOT: /tmp/vllm-dspark
+  DG_JIT_CACHE_DIR: /tmp/vllm-dspark/deepgemm
+  FLASHINFER_WORKSPACE_BASE: /tmp/vllm-dspark/flashinfer
+  TRITON_CACHE_DIR: /tmp/vllm-dspark/triton
+  TORCHINDUCTOR_CACHE_DIR: /tmp/vllm-dspark/inductor
+  TORCH_EXTENSIONS_DIR: /tmp/vllm-dspark/torch-ext
   # arch: GB10 is sm_121a; without these the JIT compiles for the wrong target or refuses
   TORCH_CUDA_ARCH_LIST: 12.1a
   FLASHINFER_CUDA_ARCH_LIST: 12.1a
@@ -92,7 +92,7 @@ env:
   VLLM_USE_FLASHINFER_SAMPLER: '1'
   VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: '0'
   VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: '256'
-  TILELANG_CACHE_DIR: /root/.cache/vllm-dspark/tilelang
+  TILELANG_CACHE_DIR: /tmp/vllm-dspark/tilelang
   TILELANG_CLEANUP_TEMP_FILES: '1'
   HF_HUB_DISABLE_XET: '1'
   TRANSFORMERS_OFFLINE: '1'
