@@ -124,4 +124,4 @@ command: |
     --default-chat-template-kwargs '{default_chat_template_kwargs}'
 
 recipe_version: '2'
-builder: ursuciprian
+builder: docker-pull

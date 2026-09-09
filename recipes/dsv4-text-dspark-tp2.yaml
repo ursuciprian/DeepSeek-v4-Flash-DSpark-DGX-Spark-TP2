@@ -119,4 +119,4 @@ command: |
     --generation-config vllm
 
 recipe_version: '2'
-builder: ursuciprian
+builder: docker-pull
