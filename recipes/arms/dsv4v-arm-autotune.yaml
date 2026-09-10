@@ -9,8 +9,8 @@
 #
 # draft_sample_method probabilistic, not greedy: greedy drafting is the documented cause of
 # garbled output on the first requests after a boot.
-description: DeepSeek-V4-Flash Vision-Exp on two DGX Sparks, DSpark k=6, fp8 KV, 400k context
-name: dsv4-vision-dspark-tp2
+description: ARM --enable-flashinfer-autotune at boot (both references pass it, we never have)
+name: dsv4v-arm-autotune
 model: deepseek-ai/DeepSeek-V4-Flash-Vision-Exp
 runtime: vllm
 container: ghcr.io/anemll/dspark-vllm-gx10@sha256:a83948492cf13df455170fb42885f5ef4db54fefe0feff0f841ecbff464ac9d8
@@ -68,7 +68,7 @@ env:
   # finds no state to resume from (upstream issue 26)
   VLLM_PREFIX_CACHE_RETENTION_INTERVAL: '4096'
   # one prefill in flight keeps decode fair; 2 widens the time-to-first-token spread
-  DSPARK_MAX_INFLIGHT_PREFILLS: '3'
+  DSPARK_MAX_INFLIGHT_PREFILLS: '1'
   VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
   # JIT caches must be node-local. Pointing these at a shared or NFS-mounted
   # directory makes every rank recompile and can deadlock the boot.
@@ -131,7 +131,8 @@ command: |
     --reasoning-parser deepseek_v4 \
     --generation-config vllm \
     --limit-mm-per-prompt '{limit_mm_per_prompt}' \
-    --default-chat-template-kwargs '{default_chat_template_kwargs}'
+    --default-chat-template-kwargs '{default_chat_template_kwargs}' \
+    --enable-flashinfer-autotune
 
 recipe_version: '2'
 builder: docker-pull

@@ -103,9 +103,16 @@ size has to move with it.
 pinned by digest, so anyone can pull exactly what was measured and a moved tag
 cannot change the build underneath.
 
-**One prefill in flight.** `DSPARK_MAX_INFLIGHT_PREFILLS=1` keeps decode fair;
-raising it to 2 widens the time-to-first-token spread across concurrent
-requests without improving the median.
+**Three prefills in flight, not one.** `DSPARK_MAX_INFLIGHT_PREFILLS=3`. The
+referenced deployments cap in-flight prefills at 1 for fairness. On this pair
+that cap is the single largest cost in the whole recipe: with two or more
+streams and any cached context, prefills queue behind each other and aggregate
+decode falls to about 30 tok/s regardless of concurrency. Raising the cap to 3
+lifts c2 by 30-80% and c5 by 30-65% at every depth from 0 to 32k, on both the
+text and the code lane, with single-stream decode and draft acceptance
+unchanged (fresh boots, bracketed by two controls whose c2 and c5 cells agree
+to within 1 tok/s). Per-stream spread at c5 did not widen. See
+`results/RESULTS.md`.
 
 ## Reasoning, tools and images
 
