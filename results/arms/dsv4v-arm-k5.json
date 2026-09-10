@@ -1,0 +1,62 @@
+[
+ {
+  "workload": "counting",
+  "tokens": 600,
+  "trials": 3,
+  "finish": "stop",
+  "thinking": false,
+  "decode_tok_s": 77.2,
+  "decode_min": 76.3,
+  "decode_max": 82.1,
+  "ttft_s": 0.2,
+  "accepted_per_cycle": 4.04
+ },
+ {
+  "workload": "json",
+  "tokens": 800,
+  "trials": 3,
+  "finish": "length",
+  "thinking": false,
+  "decode_tok_s": 73.7,
+  "decode_min": 70.9,
+  "decode_max": 76.4,
+  "ttft_s": 0.19,
+  "accepted_per_cycle": 3.94
+ },
+ {
+  "workload": "code",
+  "tokens": 600,
+  "trials": 3,
+  "finish": "length",
+  "thinking": false,
+  "decode_tok_s": 69.1,
+  "decode_min": 62.2,
+  "decode_max": 70.7,
+  "ttft_s": 0.17,
+  "accepted_per_cycle": 3.5
+ },
+ {
+  "workload": "table",
+  "tokens": 555,
+  "trials": 3,
+  "finish": "stop",
+  "thinking": false,
+  "decode_tok_s": 81.0,
+  "decode_min": 80.8,
+  "decode_max": 81.7,
+  "ttft_s": 0.17,
+  "accepted_per_cycle": 4.24
+ },
+ {
+  "workload": "prose",
+  "tokens": 376,
+  "trials": 3,
+  "finish": "stop",
+  "thinking": false,
+  "decode_tok_s": 31.4,
+  "decode_min": 28.8,
+  "decode_max": 32.2,
+  "ttft_s": 0.19,
+  "accepted_per_cycle": 1.01
+ }
+]

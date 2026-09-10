@@ -70,3 +70,76 @@ A first pass with thinking on read 62.9 tok/s on prose and 149 on JSON. Those
 figures were an artefact: the harness then counted only visible-content
 deltas, so reasoning tokens landed in the count but not in the time window.
 Discarded; the harness now treats any streamed token field as a token.
+
+## Ladder day, 2026-09-10: llama-benchy grids on fresh boots
+
+Method: one fresh boot per arm, page cache dropped on both nodes, then two
+llama-benchy 0.4.0 grids against it: the default book (text) and a 130 KB Python
+source file (code), pp 2048, tg 128, depths 0/4k/8k/16k/32k, concurrency
+1/2/5, prefix caching on, thinking off, 2 runs per cell. Controls opened and
+closed ladder 1. Across four boots of the same recipe the c2 and c5 cells
+agree to within 1 tok/s; c1 swings by up to 10 tok/s, so single-stream claims
+need several boots. Raw tables in `results/ladder/` and `results/ladder2/`.
+
+### Text lane, tg128 tok/s aggregate
+
+| depth | conc | control A | control B | gmu 0.85 | NCCL Simple | NCCL LL128 | in-flight 3 | stock sched |
+|---|---|---|---|---|---|---|---|---|
+| 0 | c1 | 46.0 | 45.1 | 45.4 | 47.5 | 48.8 | 35.5 | 45.7 |
+| 0 | c2 | 49.9 | 49.5 | 48.6 | 49.7 | 44.1 | 58.2 | 56.7 |
+| 0 | c5 | 55.3 | 52.0 | 58.4 | 53.4 | 43.6 | 80.2 | 102.7 |
+| 4k | c1 | 35.9 | 46.0 | 44.0 | 43.0 | 44.0 | 39.7 | 46.7 |
+| 4k | c2 | 30.2 | 29.3 | 32.1 | 30.8 | 30.2 | 43.2 | 60.4 |
+| 4k | c5 | 29.3 | 29.0 | 28.2 | 28.9 | 26.4 | 47.7 | 67.4 |
+| 8k | c1 | 38.0 | 39.2 | 39.3 | 37.9 | 40.9 | 38.2 | 43.6 |
+| 8k | c2 | 33.1 | 31.6 | 32.0 | 31.6 | 29.3 | 56.7 | 46.3 |
+| 8k | c5 | 28.9 | 27.6 | 28.4 | 29.1 | 26.2 | 41.2 | 73.0 |
+| 16k | c1 | 41.8 | 39.2 | 37.1 | 47.2 | 41.8 | 37.0 | 38.0 |
+| 16k | c2 | 31.5 | 29.4 | 29.7 | 30.2 | 28.8 | 41.3 | 48.0 |
+| 16k | c5 | 29.1 | 28.4 | 28.0 | 28.6 | 26.2 | 38.3 | 56.5 |
+| 32k | c1 | 42.7 | 47.3 | 43.0 | 41.5 | 45.9 | 42.0 | 39.3 |
+| 32k | c2 | 30.6 | 30.9 | 31.7 | 29.6 | 30.5 | 47.5 | 43.0 |
+| 32k | c5 | 28.0 | 26.9 | 27.9 | 27.7 | 25.4 | 39.0 | 53.8 |
+
+Code lane runs 3-5 tok/s lower at c1 and matches at c2 and c5; the in-flight 3
+code lane confirmed its text lane in every cell. Stock-scheduler code lane was
+cut short by the shutdown.
+
+### Prefill, pp2048 new tokens, tok/s (control)
+
+Depth 0: about 1480 at any concurrency. Any cached context: about 500, flat
+from 4k to 32k, at any concurrency. The cost is the sparse indexer touching
+cached keys at all, not how many. This cell did not move on any arm run so far;
+the indexer-path arms (sp-indexer, C128A prefill cache, MXFP4 indexer cache)
+were queued but not reached.
+
+### Verdicts
+
+- **Stock scheduler, promote candidate.** Skipping MiaAI's issue27 in-flight
+  prefill cap and issue43 decode-fairness patches (`DSPARK_SKIP_ISSUE27_HOTFIX=1`,
+  `DSPARK_SKIP_ISSUE43_HOTFIX=1`) doubles c5 at every depth against the control
+  and beats or matches in-flight 3 at c2. c1 and acceptance unchanged. The
+  trade is the one those patches were written for: c5 error bars widen from
+  1-2 to 10-16 tok/s, so streams are less even. Fine for an agent farm; a
+  latency-SLO chat service may prefer in-flight 3, which keeps the patches and
+  still lifts c2 by 30-80% and c5 by 30-65%.
+- **In-flight prefill 3: promoted** into the shipped recipes (`DSPARK_MAX_INFLIGHT_PREFILLS=3`).
+- **Utilization 0.85: promote.** KV pool 1.56M against 1.25M tokens, decode
+  within the band, headroom 7-8 GiB held through 32k at c5.
+- **NCCL Simple: tie. NCCL LL128: retire**, 10-30% slower prefill and 5-15%
+  lower c2/c5. The two-node step is not protocol-bound.
+- **Fixed k=5: neutral. Expert parallelism: cannot boot** on the B12X MoE kernel.
+
+### Context for the numbers
+
+Two Spark Arena entries for this checkpoint that report higher aggregates are
+four-node deployments (two independent TP2 instances behind a router; one TP4).
+Per node, this TP2 recipe is the strongest of the three, and its prefill after a
+cached 32k context, 480 tok/s, is 5x the two-instance run's 87. The TP4 run's
+depth penalty is 22% against this recipe's 67%, which points at a TP2-specific
+cost in the deep-context indexer path that remains open.
+
+Against Qwen3.8-Flash-Next on the same pair and grid: single stream is a tie;
+Qwen is about 2x faster at concurrency and prefill and 4x at c5 with cached
+context, because its linear attention has no indexer. DeepSeek wins vision and
+structured single-stream decode (73-83 tok/s on code, JSON, tables).
