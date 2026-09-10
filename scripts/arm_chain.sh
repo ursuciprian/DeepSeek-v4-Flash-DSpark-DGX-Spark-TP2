@@ -14,7 +14,7 @@ for rec in "$@"; do
   sparkrun stop --all >/dev/null 2>&1; sleep 5
   sync; echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null
   ssh "$WORKER" 'sync; echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null'
-  sparkrun run "$rec" --cluster dgx-cluster-cx7 --tp 2 --trust > "$OUT/$name-sparkrun.log" 2>&1
+  sparkrun run "$rec" --cluster dgx-cluster-cx7 --tp 2 --trust --no-follow > "$OUT/$name-sparkrun.log" 2>&1
   rc=$?
   if [ $rc -ne 0 ]; then say "$name sparkrun exit $rc"; grep -aE "failed|Error" "$OUT/$name-sparkrun.log" | tail -3 | tee -a "$LOG"; continue; fi
   up=0
