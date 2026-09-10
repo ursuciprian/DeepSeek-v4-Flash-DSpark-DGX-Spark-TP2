@@ -109,4 +109,13 @@ on DSPARK_ENABLE_DSPARK_SWA_PREFIX         && run_py hotfix-vllm-dspark-swa-pref
 on DSPARK_ENABLE_DSML_RECOVERY             && run_py hotfix-vllm-dsml-recovery.py
 on DSPARK_ENABLE_MXFP4_INDEXER_CACHE       && run_py hotfix-vllm-mxfp4-indexer-cache.py
 on DSPARK_ENABLE_C128A_PREFILL_CACHE       && run_py hotfix-vllm-c128a-prefill-cache.py
+# Several patchers import vllm, and importing vllm creates VLLM_CACHE_ROOT and the JIT cache
+# directories as whoever runs this hook. sparkrun runs hooks as root and serve as the container
+# user, so without this the serve process dies at start with
+# "PermissionError: [Errno 13] Permission denied: '/tmp/vllm-dspark/inductor'".
+for d in "${VLLM_CACHE_ROOT:-}" "${TORCHINDUCTOR_CACHE_DIR:-}" "${TRITON_CACHE_DIR:-}" "${TILELANG_CACHE_DIR:-}" \
+         "${DG_JIT_CACHE_DIR:-}" "${FLASHINFER_WORKSPACE_BASE:-}" "${TORCH_EXTENSIONS_DIR:-}" "${B12X_CUTE_COMPILE_CACHE_DIR:-}"; do
+  [ -n "$d" ] || continue
+  mkdir -p "$d" && chmod -R a+rwX "$d"
+done
 echo "mod dsv4-hotfixes: applied"
