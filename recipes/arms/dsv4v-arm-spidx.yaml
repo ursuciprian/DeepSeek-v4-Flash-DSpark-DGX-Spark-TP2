@@ -1,0 +1,139 @@
+# DeepSeek-V4-Flash Vision-Exp, TP=2 across two DGX Sparks, DSpark speculative decoding.
+#
+# Draft depth 6: this checkpoint sets n_predict=3, so the depth must be at least 5 and a multiple
+# of 3. 5 is rejected here even though it is the right value for the text checkpoint.
+#
+# CUDA graph capture is max_num_seqs x (draft depth + 1) rounded up to a multiple of 8:
+# 5 x 7 = 35 -> 40. Too small and every decode batch above the captured size runs eager; upstream
+# measured about 12% at six streams from a capture that truncated by one step.
+#
+# draft_sample_method probabilistic, not greedy: greedy drafting is the documented cause of
+# garbled output on the first requests after a boot.
+description: ARM sp-indexer prefill (MiaAI's one measured win, 128K TTFT)
+name: dsv4v-arm-spidx
+model: deepseek-ai/DeepSeek-V4-Flash-Vision-Exp
+runtime: vllm
+container: ghcr.io/anemll/dspark-vllm-gx10@sha256:a83948492cf13df455170fb42885f5ef4db54fefe0feff0f841ecbff464ac9d8
+
+min_nodes: 2
+max_nodes: 2
+
+metadata:
+  description: DeepSeek-V4-Flash Vision-Exp on two DGX Sparks, DSpark k=6, fp8 KV, 400k context
+  model_dtype: nvfp4
+  reference: https://github.com/ursuciprian/DeepSeek-v4-Flash-DSpark-DGX-Spark-TP2
+
+defaults:
+  port: 8010
+  host: 0.0.0.0
+  tensor_parallel: 2
+  pipeline_parallel: 1
+  distributed_executor_backend: mp
+  served_model_name: dsv4-vision-dspark-tp2
+  revision: 31ea11185e11ccafad1c385104188a9e3b648ad6
+  gpu_memory_utilization: 0.82
+  kv_cache_dtype: fp8
+  block_size: 256
+  max_model_len: 400000
+  max_num_seqs: 5
+  max_num_batched_tokens: 8192
+  long_prefill_token_threshold: 1024
+  num_speculative_tokens: 6
+  max_cudagraph_capture_size: 40
+  limit_mm_per_prompt: '{"image":8}'
+  default_chat_template_kwargs: '{"thinking":true,"reasoning_effort":"low"}'
+
+mods:
+  - dsv4-hotfixes-anemll-0.1.1
+
+executor_config:
+  entrypoint: ''
+  shm_size: 64gb
+  cap_add:
+    - SYS_PTRACE
+
+env:
+  DSPARK_SP_INDEXER_MIN_KEYS: '8192'
+  DSPARK_ENABLE_SP_INDEXER: '1'
+  DSPARK_MODEL: deepseek-ai/DeepSeek-V4-Flash-Vision-Exp
+  # fabric: retarget with scripts/detect-fabric.sh before the first launch
+  NCCL_SOCKET_IFNAME: enp1s0f1np1
+  GLOO_SOCKET_IFNAME: enp1s0f1np1
+  NCCL_IB_HCA: rocep1s0f1,roceP2p1s0f1
+  NCCL_IB_DISABLE: '0'
+  NCCL_IB_GID_INDEX: '3'
+  NCCL_NET: IB
+  NCCL_DEBUG: WARN
+  HF_HUB_OFFLINE: '1'
+  PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+  # prefix caching over sparse MLA needs checkpoint spacing, or a reused prefix
+  # finds no state to resume from (upstream issue 26)
+  VLLM_PREFIX_CACHE_RETENTION_INTERVAL: '4096'
+  # one prefill in flight keeps decode fair; 2 widens the time-to-first-token spread
+  DSPARK_MAX_INFLIGHT_PREFILLS: '1'
+  VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
+  # JIT caches must be node-local. Pointing these at a shared or NFS-mounted
+  # directory makes every rank recompile and can deadlock the boot.
+  VLLM_CACHE_ROOT: /tmp/vllm-dspark
+  DG_JIT_CACHE_DIR: /tmp/vllm-dspark/deepgemm
+  FLASHINFER_WORKSPACE_BASE: /tmp/vllm-dspark/flashinfer
+  TRITON_CACHE_DIR: /tmp/vllm-dspark/triton
+  TORCHINDUCTOR_CACHE_DIR: /tmp/vllm-dspark/inductor
+  TORCH_EXTENSIONS_DIR: /tmp/vllm-dspark/torch-ext
+  # arch: GB10 is sm_121a; without these the JIT compiles for the wrong target or refuses
+  TORCH_CUDA_ARCH_LIST: 12.1a
+  FLASHINFER_CUDA_ARCH_LIST: 12.1a
+  CUTE_DSL_ARCH: sm_121a
+  FLASHINFER_DISABLE_VERSION_CHECK: '1'
+  DG_JIT_USE_NVRTC: '0'
+  # fabric detail that matters on a two-node RoCE link
+  NCCL_IB_ROCE_VERSION_NUM: '2'
+  NCCL_IB_ADDR_FAMILY: AF_INET
+  NCCL_NVLS_ENABLE: '0'
+  NCCL_CUMEM_ENABLE: '0'
+  NCCL_IGNORE_CPU_AFFINITY: '1'
+  NCCL_IB_MERGE_NICS: '0'
+  # a long prefill on a deep context can exceed the default RPC timeout and kill the engine
+  VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1800'
+  VLLM_USE_FLASHINFER_SAMPLER: '1'
+  VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: '0'
+  VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: '256'
+  TILELANG_CACHE_DIR: /tmp/vllm-dspark/tilelang
+  TILELANG_CLEANUP_TEMP_FILES: '1'
+  HF_HUB_DISABLE_XET: '1'
+  TRANSFORMERS_OFFLINE: '1'
+
+command: |
+  vllm serve {model} \
+    --revision {revision} \
+    --served-model-name {served_model_name} \
+    --host {host} \
+    --port {port} \
+    --trust-remote-code \
+    --tensor-parallel-size {tensor_parallel} \
+    --pipeline-parallel-size {pipeline_parallel} \
+    --distributed-executor-backend {distributed_executor_backend} \
+    --kv-cache-dtype {kv_cache_dtype} \
+    --block-size {block_size} \
+    --max-model-len {max_model_len} \
+    --max-num-seqs {max_num_seqs} \
+    --max-num-batched-tokens {max_num_batched_tokens} \
+    --long-prefill-token-threshold {long_prefill_token_threshold} \
+    --max-cudagraph-capture-size {max_cudagraph_capture_size} \
+    --gpu-memory-utilization {gpu_memory_utilization} \
+    --enable-prefix-caching \
+    --enable-prompt-tokens-details \
+    --async-scheduling \
+    --enable-chunked-prefill \
+    --speculative-config '{{"method":"dspark","draft_sample_method":"probabilistic","num_speculative_tokens":{num_speculative_tokens}}}' \
+    --tokenizer-mode deepseek_v4 \
+    --moe-backend flashinfer_b12x \
+    --tool-call-parser deepseek_v4 \
+    --enable-auto-tool-choice \
+    --reasoning-parser deepseek_v4 \
+    --generation-config vllm \
+    --limit-mm-per-prompt '{limit_mm_per_prompt}' \
+    --default-chat-template-kwargs '{default_chat_template_kwargs}'
+
+recipe_version: '2'
+builder: docker-pull

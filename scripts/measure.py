@@ -1,27 +1,29 @@
 #!/usr/bin/env python3
-"""Per-prompt throughput and speculative acceptance against a running DeepSeek-V4 server.
+"""Per-prompt TTFT, decode rate and speculative acceptance against a running DeepSeek-V4 server.
 
-    dsv4-measure.py BASE MODEL [OUT_JSON]
+    measure.py BASE MODEL [OUT_JSON] [--trials N]
 
-Acceptance is read as a counter delta around each request, so a figure belongs to the content
-that produced it. A cumulative read mixes warm-up and every prompt type together, and this
-drafter's acceptance swings from about a third on prose to three quarters on structured output,
-so the cumulative number is meaningless for comparison.
-
-Warms first: every published figure for this model is warm and the cold penalty is near 30%.
-Non-streamed: streamed deltas measure steps per second, not tokens per second.
+Decode is quoted the way both public deployments quote it: completion tokens divided by the time
+from the first streamed token to the last, so time-to-first-token is reported separately and does
+not drag a 200-token answer down. Token counts come from the server's usage block, not from
+counting stream deltas, because a delta is a decode step and a step carries several tokens under
+speculative decoding. Acceptance is a counter delta around each request, so it belongs to the
+content that produced it; this drafter accepts a third on prose and three quarters on structured
+output, and a pooled number hides that. Warms first: every published figure is warm.
 """
-import json, sys, time, urllib.request
+import json, statistics, sys, time, urllib.request
 
-BASE, MODEL = sys.argv[1], sys.argv[2]
-OUT = sys.argv[3] if len(sys.argv) > 3 else None
+args = [a for a in sys.argv[1:] if not a.startswith("--")]
+BASE, MODEL = args[0], args[1]
+OUT = args[2] if len(args) > 2 else None
+TRIALS = int(sys.argv[sys.argv.index("--trials") + 1]) if "--trials" in sys.argv else 1
 
 PROMPTS = [
-    ("counting",   "Count from 1 to 300, one number per line.", 900),
-    ("json",       "Emit a JSON array of 60 objects, each with id, name, email and city fields.", 800),
-    ("code",       "Write a Python binary search tree with insert, delete and in-order traversal.", 600),
-    ("table",      "Write the full 12 by 12 multiplication table as a markdown table.", 900),
-    ("prose",      "Write a 200 word narrative about a lighthouse keeper.", 300),
+    ("counting", "Count from 1 to 300, one number per line.", 900),
+    ("json",     "Emit a JSON array of 60 objects, each with id, name, email and city fields.", 800),
+    ("code",     "Write a Python binary search tree with insert, delete and in-order traversal.", 600),
+    ("table",    "Write the full 12 by 12 multiplication table as a markdown table.", 900),
+    ("prose",    "Write a 300 word narrative about a lighthouse keeper.", 450),
 ]
 
 
@@ -40,13 +42,27 @@ def counters():
 
 
 def ask(prompt, max_tokens):
+    """Returns (completion_tokens, ttft_s, decode_s)."""
     body = json.dumps({"model": MODEL, "messages": [{"role": "user", "content": prompt}],
-                       "max_tokens": max_tokens, "temperature": 0, "stream": False}).encode()
-    t = time.time()
-    r = json.load(urllib.request.urlopen(urllib.request.Request(
-        BASE + "/v1/chat/completions", body, {"Content-Type": "application/json"}), timeout=900))
-    el = time.time() - t
-    return r.get("usage", {}).get("completion_tokens", 0), el
+                       "max_tokens": max_tokens, "temperature": 0, "stream": True,
+                       "stream_options": {"include_usage": True}}).encode()
+    req = urllib.request.Request(BASE + "/v1/chat/completions", body, {"Content-Type": "application/json"})
+    t0 = time.time(); t_first = None; t_last = t0; n = 0
+    with urllib.request.urlopen(req, timeout=900) as r:
+        for raw in r:
+            line = raw.decode().strip()
+            if not line.startswith("data:") or line == "data: [DONE]":
+                continue
+            ev = json.loads(line[5:])
+            if ev.get("usage"):
+                n = ev["usage"].get("completion_tokens", n)
+            ch = ev.get("choices") or []
+            if ch and (ch[0].get("delta") or {}).get("content") or ch and (ch[0].get("delta") or {}).get("reasoning_content"):
+                now = time.time()
+                if t_first is None: t_first = now
+                t_last = now
+    t_first = t_first or t_last
+    return n, t_first - t0, max(t_last - t_first, 1e-6)
 
 
 print("warming", flush=True)
@@ -55,23 +71,23 @@ for _ in range(3):
 
 rows = []
 for label, prompt, maxtok in PROMPTS:
-    c0 = counters()
-    n, el = ask(prompt, maxtok)
-    c1 = counters()
-    dd = c1["drafts"] - c0["drafts"]
-    da = c1["accepted"] - c0["accepted"]
-    per_cycle = da / dd if dd else 0.0
-    row = {"workload": label, "tokens": n, "seconds": round(el, 2),
-           "tok_s": round(n / el, 1) if el else 0.0,
-           "accepted_per_cycle": round(per_cycle, 2), "draft_cycles": int(dd)}
+    dec, ttft, acc = [], [], []
+    for _ in range(TRIALS):
+        c0 = counters(); n, tf, td = ask(prompt, maxtok); c1 = counters()
+        dd = c1["drafts"] - c0["drafts"]; da = c1["accepted"] - c0["accepted"]
+        dec.append(n / td); ttft.append(tf); acc.append(da / dd if dd else 0.0)
+    row = {"workload": label, "tokens": n, "trials": TRIALS,
+           "decode_tok_s": round(statistics.median(dec), 1),
+           "decode_min": round(min(dec), 1), "decode_max": round(max(dec), 1),
+           "ttft_s": round(statistics.median(ttft), 2),
+           "accepted_per_cycle": round(statistics.median(acc), 2)}
     rows.append(row)
-    print(f"  {label:9s} {n:4d} tok  {row['tok_s']:6.1f} tok/s   "
-          f"accept {per_cycle:.2f}/5 = {100*per_cycle/5:4.1f}%   cycles {int(dd)}", flush=True)
+    print(f"  {label:9s} {n:4d} tok  decode {row['decode_tok_s']:6.1f} tok/s"
+          f"  ({row['decode_min']}-{row['decode_max']})  ttft {row['ttft_s']:.2f}s"
+          f"  accept {row['accepted_per_cycle']:.2f}", flush=True)
 
 if rows:
-    best = max(rows, key=lambda r: r["tok_s"])
-    print(f"\npeak {best['tok_s']} tok/s on {best['workload']}, "
-          f"mean {round(sum(r['tok_s'] for r in rows)/len(rows), 1)} tok/s across {len(rows)} shapes")
+    real = [r["decode_tok_s"] for r in rows if r["workload"] != "counting"]
+    print(f"\nreal-prompt median {statistics.median(real):.1f} tok/s (counting excluded, acceptance ceiling only)")
 if OUT:
-    json.dump(rows, open(OUT, "w"), indent=1)
-    print("wrote", OUT)
+    json.dump(rows, open(OUT, "w"), indent=1); print("wrote", OUT)
