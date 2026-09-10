@@ -9,8 +9,8 @@
 #
 # draft_sample_method probabilistic, not greedy: greedy drafting is the documented cause of
 # garbled output on the first requests after a boot.
-description: ARM max_num_batched_tokens 16384, fewer prefill chunks per 2048-token turn
-name: dsv4v-arm-mnbt16k
+description: ARM C128A prefill metadata cache, indexer conversion reused across layers, aimed at the 3x prefill penalty at 32k depth
+name: dsv4v-arm-c128a
 model: deepseek-ai/DeepSeek-V4-Flash-Vision-Exp
 runtime: vllm
 container: ghcr.io/anemll/dspark-vllm-gx10@sha256:a83948492cf13df455170fb42885f5ef4db54fefe0feff0f841ecbff464ac9d8
@@ -36,7 +36,7 @@ defaults:
   block_size: 256
   max_model_len: 400000
   max_num_seqs: 5
-  max_num_batched_tokens: 16384
+  max_num_batched_tokens: 8192
   long_prefill_token_threshold: 1024
   num_speculative_tokens: 6
   max_cudagraph_capture_size: 40
@@ -53,6 +53,7 @@ executor_config:
     - SYS_PTRACE
 
 env:
+  DSPARK_ENABLE_C128A_PREFILL_CACHE: '1'
   DSPARK_MODEL: deepseek-ai/DeepSeek-V4-Flash-Vision-Exp
   # fabric: retarget with scripts/detect-fabric.sh before the first launch
   NCCL_SOCKET_IFNAME: enp1s0f1np1
