@@ -7,7 +7,7 @@
 # A boot that dies in the worker rendezvous (the intermittent race) is retried once.
 export PATH="$HOME/.local/bin:$PATH"
 R="$HOME/GEN-AI/DeepSeek-v4-Flash-DSpark-DGX-Spark-TP2"; cd "$R" || exit 1
-OUT="$R/results/ladder"; mkdir -p "$OUT"; LOG="$OUT/ladder.log"
+OUT="${LADDER_OUT:-$R/results/ladder}"; mkdir -p "$OUT"; LOG="$OUT/ladder.log"
 BASE=http://192.168.100.62:8010; WORKER=192.168.100.53
 TOK=$(ls -d ~/.cache/huggingface/hub/models--deepseek-ai--DeepSeek-V4-Flash-Vision-Exp/snapshots/*/ | head -1)
 DEPTHS=${DEPTHS:-"0 4096 8192 16384 32768"}; CONC=${CONC:-"1 2 5"}; RUNS=${RUNS:-2}
