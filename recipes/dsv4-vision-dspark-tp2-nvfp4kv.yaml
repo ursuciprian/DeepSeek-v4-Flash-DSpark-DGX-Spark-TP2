@@ -37,6 +37,9 @@ defaults:
   limit_mm_per_prompt: '{"image":8}'
   default_chat_template_kwargs: '{"thinking":true,"reasoning_effort":"low"}'
 
+mods:
+  - dsv4-hotfixes-anemll-0.1.1
+
 executor_config:
   entrypoint: ''
   shm_size: 64gb
@@ -44,6 +47,7 @@ executor_config:
     - SYS_PTRACE
 
 env:
+  DSPARK_MODEL: deepseek-ai/DeepSeek-V4-Flash-Vision-Exp
   # fabric: retarget with scripts/detect-fabric.sh before the first launch
   NCCL_SOCKET_IFNAME: enp1s0f1np1
   GLOO_SOCKET_IFNAME: enp1s0f1np1

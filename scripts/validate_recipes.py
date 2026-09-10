@@ -117,6 +117,11 @@ def check(path: Path) -> None:
 
     # --- mods must exist and be runnable
     for m in mods:
+        if str(m).startswith("@"):
+            # registry-scoped reference (@registry/mod): resolvable only on a host that has that
+            # registry added, so it cannot be checked from here
+            warn(path, f"mod `{m}` is registry-scoped; the user must `sparkrun registry add` first")
+            continue
         rel = str(m).removeprefix("mods/")
         cands = [path.parent / "mods" / rel, REPO / "mods" / rel, path.parent / rel]
         hit = next((c for c in cands if (c / "run.sh").is_file()), None)
@@ -125,7 +130,7 @@ def check(path: Path) -> None:
             continue
         rs = (hit / "run.sh").read_text()
         for ref in re.findall(r'\$HERE/([A-Za-z0-9_.\-]+)', rs):
-            if not (hit / ref).is_file(): err(path, f"mod `{m}` run.sh copies {ref}, which is missing")
+            if not (hit / ref).exists(): err(path, f"mod `{m}` run.sh copies {ref}, which is missing")
 
     # --- DSpark: draft depth, capture size and sampling are coupled and each has bitten
     if "dspark" in cmd:
