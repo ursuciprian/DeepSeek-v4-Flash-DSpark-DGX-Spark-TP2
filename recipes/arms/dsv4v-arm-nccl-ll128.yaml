@@ -1,10 +1,16 @@
-# As dsv4-vision-dspark-tp2 but with the padded NVFP4 sparse-MLA KV cache instead of fp8.
-# Same 584-byte cache envelope, roughly 2.3-2.9M KV tokens against fp8's smaller pool, which is
-# what lets several long conversations stay resident at once. Acceptance is unchanged; this is a
-# capacity knob, not a speed one. The image's issue-22 hotfix must stay enabled (it is by
-# default) or long-context decode degrades under this dtype.
-description: DeepSeek-V4-Flash Vision-Exp on two DGX Sparks, DSpark k=6, NVFP4 sparse-MLA KV, 1M context
-name: dsv4-vision-dspark-tp2-nvfp4kv
+# DeepSeek-V4-Flash Vision-Exp, TP=2 across two DGX Sparks, DSpark speculative decoding.
+#
+# Draft depth 6: this checkpoint sets n_predict=3, so the depth must be at least 5 and a multiple
+# of 3. 5 is rejected here even though it is the right value for the text checkpoint.
+#
+# CUDA graph capture is max_num_seqs x (draft depth + 1) rounded up to a multiple of 8:
+# 5 x 7 = 35 -> 40. Too small and every decode batch above the captured size runs eager; upstream
+# measured about 12% at six streams from a capture that truncated by one step.
+#
+# draft_sample_method probabilistic, not greedy: greedy drafting is the documented cause of
+# garbled output on the first requests after a boot.
+description: ARM NCCL_PROTO=LL128, step time is the ceiling on every workload
+name: dsv4v-arm-nccl-ll128
 model: deepseek-ai/DeepSeek-V4-Flash-Vision-Exp
 runtime: vllm
 container: ghcr.io/anemll/dspark-vllm-gx10@sha256:a83948492cf13df455170fb42885f5ef4db54fefe0feff0f841ecbff464ac9d8
@@ -13,7 +19,7 @@ min_nodes: 2
 max_nodes: 2
 
 metadata:
-  description: DeepSeek-V4-Flash Vision-Exp on two DGX Sparks, DSpark k=6, NVFP4 sparse-MLA KV, 1M context
+  description: DeepSeek-V4-Flash Vision-Exp on two DGX Sparks, DSpark k=6, fp8 KV, 400k context
   model_dtype: nvfp4
   reference: https://github.com/ursuciprian/DeepSeek-v4-Flash-DSpark-DGX-Spark-TP2
 
@@ -23,17 +29,17 @@ defaults:
   tensor_parallel: 2
   pipeline_parallel: 1
   distributed_executor_backend: mp
-  served_model_name: dsv4-vision-dspark-tp2-nvfp4kv
+  served_model_name: dsv4-vision-dspark-tp2
   revision: 31ea11185e11ccafad1c385104188a9e3b648ad6
   gpu_memory_utilization: 0.82
-  kv_cache_dtype: nvfp4_ds_mla
+  kv_cache_dtype: fp8
   block_size: 256
-  max_model_len: 1048576
-  max_num_seqs: 6
+  max_model_len: 400000
+  max_num_seqs: 5
   max_num_batched_tokens: 8192
   long_prefill_token_threshold: 1024
   num_speculative_tokens: 6
-  max_cudagraph_capture_size: 48
+  max_cudagraph_capture_size: 40
   limit_mm_per_prompt: '{"image":8}'
   default_chat_template_kwargs: '{"thinking":true,"reasoning_effort":"low"}'
 
@@ -47,6 +53,7 @@ executor_config:
     - SYS_PTRACE
 
 env:
+  NCCL_PROTO: 'LL128'
   DSPARK_MODEL: deepseek-ai/DeepSeek-V4-Flash-Vision-Exp
   # fabric: retarget with scripts/detect-fabric.sh before the first launch
   NCCL_SOCKET_IFNAME: enp1s0f1np1

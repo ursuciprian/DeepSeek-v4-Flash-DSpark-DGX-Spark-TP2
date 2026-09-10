@@ -42,3 +42,31 @@ registered. Both public deployments solve this outside the recipe: one applies a
 startup hotfix in its launch script, the other stages four `ds4v_*` files
 read-only on both nodes. A plain `vllm serve` on the bare image does neither.
 The two vision recipes here are therefore unverified until that is resolved.
+
+## Vision-Exp boots and measures on this pair, 2026-09-10
+
+`dsv4-vision-dspark-tp2` with the hotfix mod, fp8 KV, 400k context, k=6,
+5 sequences, capture 40, utilization 0.82. Boot to healthy 10 minutes. Draft
+loaded 99 params (text: 96; the three extra are the vision `bias_vl` remaps).
+KV pool 1,289,993 tokens, 3.22x concurrency at 400k. MemAvailable head 10 GiB.
+
+Thinking off, streaming, decode from first token to last, median of 3:
+
+| workload | decode tok/s | min-max | accepted per cycle (of 6) |
+|---|---|---|---|
+| table | 82.5 | 74.2-82.5 | 4.50 |
+| json | 79.0 | 76.2-79.8 | 4.47 |
+| code | 73.3 | 60.7-73.6 | 3.85 |
+| counting (ceiling only) | 71.7 | 67.3-74.5 | 3.89 |
+| prose | 29.9 | 29.1-30.5 | 0.96 |
+
+TTFT on these short prompts 0.16-0.18 s. Reference TP2 vision figures from
+the same checkpoint: prose 33.2, code 51.8, counting 80.1 (upstream launcher,
+k=5, NVFP4 KV, 12 sequences). Code is 41% ahead; prose and counting about 10%
+behind. Prose acceptance under one token per six-draft cycle is the number to
+move: every cycle verifies six drafts and keeps one.
+
+A first pass with thinking on read 62.9 tok/s on prose and 149 on JSON. Those
+figures were an artefact: the harness then counted only visible-content
+deltas, so reasoning tokens landed in the count but not in the time window.
+Discarded; the harness now treats any streamed token field as a token.
