@@ -17,6 +17,7 @@ args = [a for a in sys.argv[1:] if not a.startswith("--")]
 BASE, MODEL = args[0], args[1]
 OUT = args[2] if len(args) > 2 else None
 TRIALS = int(sys.argv[sys.argv.index("--trials") + 1]) if "--trials" in sys.argv else 1
+THINKING = "--thinking" in sys.argv   # default off: both public deployments quote thinking-off decode
 
 PROMPTS = [
     ("counting", "Count from 1 to 300, one number per line.", 900),
@@ -45,9 +46,10 @@ def ask(prompt, max_tokens):
     """Returns (completion_tokens, ttft_s, decode_s)."""
     body = json.dumps({"model": MODEL, "messages": [{"role": "user", "content": prompt}],
                        "max_tokens": max_tokens, "temperature": 0, "stream": True,
+                       "chat_template_kwargs": {"thinking": THINKING},
                        "stream_options": {"include_usage": True}}).encode()
     req = urllib.request.Request(BASE + "/v1/chat/completions", body, {"Content-Type": "application/json"})
-    t0 = time.time(); t_first = None; t_last = t0; n = 0
+    t0 = time.time(); t_first = None; t_last = t0; n = 0; finish = None
     with urllib.request.urlopen(req, timeout=900) as r:
         for raw in r:
             line = raw.decode().strip()
@@ -57,12 +59,17 @@ def ask(prompt, max_tokens):
             if ev.get("usage"):
                 n = ev["usage"].get("completion_tokens", n)
             ch = ev.get("choices") or []
-            if ch and (ch[0].get("delta") or {}).get("content") or ch and (ch[0].get("delta") or {}).get("reasoning_content"):
-                now = time.time()
-                if t_first is None: t_first = now
-                t_last = now
-    t_first = t_first or t_last
-    return n, t_first - t0, max(t_last - t_first, 1e-6)
+            if ch:
+                delta = ch[0].get("delta") or {}
+                finish = ch[0].get("finish_reason") or finish
+                # any non-empty string field is a generated token: content, reasoning, reasoning_content
+                if any(isinstance(v, str) and v for v in delta.values()):
+                    now = time.time()
+                    if t_first is None: t_first = now
+                    t_last = now
+    if t_first is None or t_last - t_first < 0.05:
+        raise RuntimeError(f"no streamed tokens observed (finish={finish}, usage tokens={n})")
+    return n, t_first - t0, t_last - t_first, finish
 
 
 print("warming", flush=True)
@@ -73,10 +80,10 @@ rows = []
 for label, prompt, maxtok in PROMPTS:
     dec, ttft, acc = [], [], []
     for _ in range(TRIALS):
-        c0 = counters(); n, tf, td = ask(prompt, maxtok); c1 = counters()
+        c0 = counters(); n, tf, td, fin = ask(prompt, maxtok); c1 = counters()
         dd = c1["drafts"] - c0["drafts"]; da = c1["accepted"] - c0["accepted"]
         dec.append(n / td); ttft.append(tf); acc.append(da / dd if dd else 0.0)
-    row = {"workload": label, "tokens": n, "trials": TRIALS,
+    row = {"workload": label, "tokens": n, "trials": TRIALS, "finish": fin, "thinking": THINKING,
            "decode_tok_s": round(statistics.median(dec), 1),
            "decode_min": round(min(dec), 1), "decode_max": round(max(dec), 1),
            "ttft_s": round(statistics.median(ttft), 2),
@@ -84,7 +91,7 @@ for label, prompt, maxtok in PROMPTS:
     rows.append(row)
     print(f"  {label:9s} {n:4d} tok  decode {row['decode_tok_s']:6.1f} tok/s"
           f"  ({row['decode_min']}-{row['decode_max']})  ttft {row['ttft_s']:.2f}s"
-          f"  accept {row['accepted_per_cycle']:.2f}", flush=True)
+          f"  accept {row['accepted_per_cycle']:.2f}  finish={fin}", flush=True)
 
 if rows:
     real = [r["decode_tok_s"] for r in rows if r["workload"] != "counting"]
