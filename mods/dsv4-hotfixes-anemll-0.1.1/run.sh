@@ -109,6 +109,9 @@ on DSPARK_ENABLE_DSPARK_SWA_PREFIX         && run_py hotfix-vllm-dspark-swa-pref
 on DSPARK_ENABLE_DSML_RECOVERY             && run_py hotfix-vllm-dsml-recovery.py
 on DSPARK_ENABLE_MXFP4_INDEXER_CACHE       && run_py hotfix-vllm-mxfp4-indexer-cache.py
 on DSPARK_ENABLE_C128A_PREFILL_CACHE       && run_py hotfix-vllm-c128a-prefill-cache.py
+# Ours, not upstream: per-position confidence truncation of the DSpark draft block. Inert unless
+# DSPARK_DRAFT_CONF_THRESHOLD > 0 as well; the patch only installs the code path.
+on DSPARK_ENABLE_ADAPTIVE_DRAFT            && run_py hotfix-dsv4-adaptive-draft.py
 # Several patchers import vllm, and importing vllm creates VLLM_CACHE_ROOT and the JIT cache
 # directories as whoever runs this hook. sparkrun runs hooks as root and serve as the container
 # user, so without this the serve process dies at start with
