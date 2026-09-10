@@ -59,7 +59,7 @@ env:
   # finds no state to resume from (upstream issue 26)
   VLLM_PREFIX_CACHE_RETENTION_INTERVAL: '4096'
   # one prefill in flight keeps decode fair; 2 widens the time-to-first-token spread
-  DSPARK_MAX_INFLIGHT_PREFILLS: '1'
+  DSPARK_MAX_INFLIGHT_PREFILLS: '3'
   VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
   # JIT caches must be node-local. Pointing these at a shared or NFS-mounted
   # directory makes every rank recompile and can deadlock the boot.
