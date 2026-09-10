@@ -32,8 +32,9 @@ boot() {  # boot <recipe> <name> -> 0 healthy, 1 failed, 2 rendezvous race (retr
   return 1
 }
 
+i=0
 for rec in "$@"; do
-  name=$(basename "$rec" .yaml); say "$name start"
+  i=$((i+1)); name=$(printf "%02d-%s" "$i" "$(basename "$rec" .yaml)"); say "$name start"
   boot "$rec" "$name"; rc=$?
   if [ $rc = 2 ]; then say "$name rendezvous race, retrying once"; boot "$rec" "$name"; rc=$?; fi
   if [ $rc != 0 ]; then say "$name never healthy"; grep -aE "Error|error:" "$OUT/$name-serve.log" 2>/dev/null | grep -viE "use_fast|deprecated|core.py:1231" | tail -2 | cut -c1-200 | tee -a "$LOG"; sparkrun stop --all >/dev/null 2>&1; continue; fi
