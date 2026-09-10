@@ -91,10 +91,10 @@ on DSPARK_ENABLE_ISSUE141_SPARSE_MLA_CHUNK && run_py hotfix-dsv4-issue141-sparse
 on DSPARK_ENABLE_SP_INDEXER               && run_py hotfix-dsv4-sp-indexer-prefill.py
 on DSPARK_ENABLE_DEEPGEMM_SM121_ALIAS      && run_sh hotfix-deepgemm-sm121-mqa-header-alias.sh
 run_py hotfix-vllm-empty-encoder-output.py
-run_py hotfix-dsv4-issue27-partial-prefill-concurrency.py
+on DSPARK_SKIP_ISSUE27_HOTFIX || run_py hotfix-dsv4-issue27-partial-prefill-concurrency.py
 on DSPARK_ENABLE_ADAPTIVE_CHUNK            && run_py hotfix-dsv4-adaptive-prefill-chunk.py
 on DSPARK_ENABLE_REPLICATE_MARKOV          && run_py hotfix-dsv4-replicate-markov-head.py
-run_py hotfix-dsv4-issue43-decode-fairness-and-diag.py
+on DSPARK_SKIP_ISSUE43_HOTFIX || run_py hotfix-dsv4-issue43-decode-fairness-and-diag.py
 run_py hotfix-dsv4-issue26-hybrid-swa-min.py
 run_py hotfix-dsv4-issue133-triton-specialization.py
 run_py hotfix-dsv4-runtime-ablation.py
